@@ -1,16 +1,17 @@
+#clcarwin / focal_loss_pytorch
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-import numpy as np
+
 
 class FocalLoss(nn.Module):
-    def __init__(self, gamma=0, alpha=None, size_average=True):
+    def __init__(self, gamma=2, alpha=None, size_average=True):
         super(FocalLoss, self).__init__()
         self.gamma = gamma
         self.alpha = alpha
-        if isinstance(alpha,(float,int,long)): self.alpha = torch.Tensor([alpha,1-alpha])
-        if isinstance(alpha,list): self.alpha = torch.Tensor(alpha)
+#         if isinstance(alpha,(float,int,long)): self.alpha = torch.Tensor([alpha,1-alpha])
+#         if isinstance(alpha,list): self.alpha = torch.Tensor(alpha)
         self.size_average = size_average
 
     def forward(self, input, target):
@@ -34,9 +35,9 @@ class FocalLoss(nn.Module):
         loss = -1 * (1-pt)**self.gamma * logpt
         if self.size_average: return loss.mean()
         else: return loss.sum()
-
+# My Focal Loss
 class FocalLoss2(nn.Module):
-    def __init__(self, gamma=0, eps=1e-7):
+    def __init__(self, gamma=2, eps=1e-7):
         super(FocalLoss2, self).__init__()
         self.gamma = gamma
         self.eps = eps
@@ -53,18 +54,13 @@ class FocalLoss2(nn.Module):
         loss = -1 * y * torch.log(logit) # cross entropy
         loss = loss * (1 - logit) ** self.gamma # focal loss
 
-        return loss.mean()  
-
+        return loss.mean()      
+# My Focal Loss
 class FocalLoss3(nn.Module):# for cutmix
-    def __init__(self, gamma=0, eps=1e-7):
+    def __init__(self, gamma=2, eps=1e-7):
         super(FocalLoss3, self).__init__()
         self.gamma = gamma
         self.eps = eps
-    def fl_onehot(self,index,classes,tar):
-        y_onehot = torch.FloatTensor(index, classes).to("cuda")
-        y_onehot.zero_()
-        y_onehot.scatter_(1, tar, 1)
-        return (y_onehot)        
     def forward(self, inputs, targets):
         logit = F.softmax(inputs, dim=-1)
         logit = logit.clamp(self.eps, 1. - self.eps)
@@ -72,8 +68,7 @@ class FocalLoss3(nn.Module):# for cutmix
         loss = -1 * targets * torch.log(logit) # cross entropy
         loss = loss * (1 - logit) ** self.gamma # focal loss
 
-        return loss.mean()
-
+        return loss.mean()  
 import torch.nn.functional as F
 class DenseCrossEntropy(nn.Module):
     def __init__(self):
@@ -82,23 +77,37 @@ class DenseCrossEntropy(nn.Module):
     def forward(self, logits, labels):
         logits = logits.float()
         labels = labels.float()
+        
         logprobs = F.log_softmax(logits, dim=-1)
+        
         loss = -labels * logprobs
         loss = loss.sum(-1)
-        return loss.mean()        
 
+        return loss.mean()          
+
+## Engine
 from sklearn.metrics import accuracy_score
 class Engine:
-    def __init__(self,model,optimizer,device):
+    def __init__(self,model,optimizer,device,classes,weights=None):
         self.model=model
         self.optimizer=optimizer
         self.device=device
+        self.classes=classes
+        self.weights=weights
+        
+        class_weights = torch.FloatTensor(weights).cuda()
+        self.criterion=nn.CrossEntropyLoss(class_weights)
+#         self.criterion=DenseCrossEntropy()
+#         self.criterion=FocalLoss2()
+#         self.criterion=FocalLoss3()
     
     def loss_fn(self,targets,outputs):
-        #return DenseCrossEntropy()(outputs,targets)
-        #return nn.CrossEntropyLoss()(outputs,targets)
-        #return FocalLoss2()(outputs,targets)
-        return FocalLoss3()(outputs,targets)
+        return self.criterion(outputs,targets)
+        
+    def get_accuracy(self,labels,preds):
+        total=labels.shape[0]
+        preds=preds.argmax(1).reshape(-1,1)
+        return np.uint8(labels==preds).sum()/total
     
     def train(self,data_loader):
         preds_for_acc = []
@@ -114,16 +123,16 @@ class Engine:
             loss.backward()
             self.optimizer.step()
             final_loss += loss.item()
-            ## Acc Check
-            #labels_for_acc = np.concatenate((labels_for_acc, targets.cpu().numpy()), 0)
-            #preds_for_acc = np.concatenate((preds_for_acc, np.argmax(outputs.cpu().detach().numpy(), 1)), 0)
+            ## accuracy
+            labels = targets.cpu().numpy().reshape(-1,1)
+            preds = outputs.cpu().detach().numpy()
             if len(labels_for_acc)==0:
-                labels_for_acc = targets.cpu().numpy()
-                preds_for_acc = outputs.cpu().detach().numpy()
+                labels_for_acc = labels
+                preds_for_acc = preds
             else:
-                labels_for_acc=np.vstack((labels_for_acc,targets.cpu().numpy()))
-                preds_for_acc=np.vstack((preds_for_acc,outputs.cpu().detach().numpy()))
-        accuracy = np.uint(labels_for_acc.argmax(1)==preds_for_acc.argmax(1)).sum()/labels_for_acc.shape[0]
+                labels_for_acc=np.vstack((labels_for_acc,labels))
+                preds_for_acc=np.vstack((preds_for_acc,preds))
+        accuracy = self.get_accuracy(labels_for_acc,preds_for_acc)
         return final_loss/len(data_loader),accuracy
     
     def validate(self,data_loader):
@@ -138,17 +147,17 @@ class Engine:
                 outputs=self.model(inputs)
                 loss=self.loss_fn(targets,outputs)
                 final_loss += loss.item()
-            ## Acc Check
-            #labels_for_acc = np.concatenate((labels_for_acc, targets.cpu().numpy()), 0)
-            #preds_for_acc = np.concatenate((preds_for_acc, np.argmax(outputs.cpu().detach().numpy(), 1)), 0)
+            ## accuracy
+            labels = targets.cpu().numpy().reshape(-1,1)
+            preds = outputs.cpu().detach().numpy()
             if len(labels_for_acc)==0:
-                labels_for_acc = targets.cpu().numpy()
-                preds_for_acc = outputs.cpu().detach().numpy()
+                labels_for_acc = labels
+                preds_for_acc = preds
             else:
-                labels_for_acc=np.vstack((labels_for_acc,targets.cpu().numpy()))
-                preds_for_acc=np.vstack((preds_for_acc,outputs.cpu().detach().numpy()))
-        accuracy = np.uint(labels_for_acc.argmax(1)==preds_for_acc.argmax(1)).sum()/labels_for_acc.shape[0]
-        return final_loss/len(data_loader),accuracy
+                labels_for_acc=np.vstack((labels_for_acc,labels))
+                preds_for_acc=np.vstack((preds_for_acc,preds))
+        accuracy = self.get_accuracy(labels_for_acc,preds_for_acc)
+        return final_loss/len(data_loader),accuracy,labels_for_acc,preds_for_acc
     
     def predict(self,data_loader):
         self.model.eval()

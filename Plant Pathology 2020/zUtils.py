@@ -109,17 +109,14 @@ class Utils:
             ])
         elif mode =="train":
             aug=A.Compose([
-                #A.RandomResizedCrop(height=SIZE, width=SIZE, p=1.0),
                 A.Flip(),
                 A.ShiftScaleRotate(rotate_limit=1.0, p=0.8),
-
                 # Pixels
                 A.OneOf([
                     A.IAAEmboss(p=1.0),
                     A.IAASharpen(p=1.0),
                     A.Blur(p=1.0),
                 ], p=0.5),
-
                 # Affine
                 A.OneOf([
                     A.ElasticTransform(p=1.0),
@@ -136,9 +133,46 @@ class Utils:
             ])
 
         return aug 
-    def get_model(model_name):
-        if model_name=="effinet": return EffiNet()
-        if model_name=="resnet": return Resnet50()    
-        if model_name=="densenet": return Densenet()    
-        if model_name=="effinet7": return EffiNet7()  
+    def get_model(model_name, classes):
+        if model_name=="effinet": return EffiNet(classes=classes)
+        if model_name=="resnet": return Resnet50(classes=classes)    
+        if model_name=="densenet": return Densenet(classes=classes)    
+        if model_name=="effinet7": return EffiNet7(classes=classes)   
 
+class History:
+    def __init__(self,model_name):
+        self.train_info=dict()
+        self.valid_info=dict()
+        self.best_idx=np.zeros(10)
+        self.model_name=model_name
+    def initial_info(self,fold):
+        key=f"F{fold}_Acc"
+        self.train_info[key]=[]
+        key=f"F{fold}_loss"
+        self.train_info[key]=[]    
+        key=f"F{fold}_Acc"
+        self.valid_info[key]=[]
+        key=f"F{fold}_loss"
+        self.valid_info[key]=[]     
+        key=f"F{fold}_labels"
+        self.valid_info[key]=[]     
+        key=f"F{fold}_preds"
+        self.valid_info[key]=[]
+    def add_train_info(self,fold, train_acc,train_loss,valid_acc,valid_loss,valid_labels,valid_preds):
+        key=f"F{fold}_Acc"
+        self.train_info[key].append(train_acc)
+        key=f"F{fold}_loss"
+        self.train_info[key].append(train_loss)
+        key=f"F{fold}_Acc"
+        self.valid_info[key].append(valid_acc)
+        key=f"F{fold}_loss"
+        self.valid_info[key].append(valid_loss) 
+        key=f"F{fold}_labels"
+        self.valid_info[key].append(valid_labels) 
+        key=f"F{fold}_preds"
+        self.valid_info[key].append(valid_preds) 
+    def get_best_info(fold):
+        ids=self.best_idx[fold]
+        return self.valid_info[f"F{fold}_acc"][ids],\
+    self.valid_info[f"F{fold}_labels"][ids],\
+    self.valid_info[f"F{fold}_preds"][ids]
