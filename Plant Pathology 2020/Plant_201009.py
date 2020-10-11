@@ -125,27 +125,21 @@ def predict(fold=0):
     preds=np.vstack(preds)
     return preds 
 
+def loop_train_process(model_name):
+#     loop_train(fold=0,model_name=model_name,weights=[1,1])
+#     loop_train(fold=0,model_name=model_name,weights=[2,1])
+#      loop_train(fold=0,model_name=model_name,weights=[4,1])
+    loop_train(fold=0,model_name=model_name,weights=[8,1])
+#     loop_train(fold=0,model_name=model_name,weights=[16,1])
+#     loop_train(fold=0,model_name=model_name,weight=[32,1])
+    
+    
+    
+#     loop_train(fold=1,model_name=model_name)
+#     loop_train(fold=2,model_name=model_name)
+#     loop_train(fold=3,model_name=model_name)
+#     loop_train(fold=4,model_name=model_name)
+
 if __name__ == "__main__":
-    loop_train(fold=0)
-    # loop_train(fold=1)
-    # loop_train(fold=2)
-    # loop_train(fold=3)
-    # loop_train(fold=4)
-
-    # d1=predict(0)
-    # d2=predict(1)
-    # d3=predict(2)
-    # d4=predict(3)
-    # d5=predict(4)
-
-    # p1 = softmax(d1, axis=1)
-    # p2 = softmax(d2, axis=1)
-    # p3 = softmax(d3, axis=1)
-    # p4 = softmax(d4, axis=1)
-    # p5 = softmax(d5, axis=1)
-
-    # p=(p1+p2+p3+p4+p5)/5
-    # p = softmax(p, axis=1)
-    # submission_df = pd.read_csv("../input/plant-pathology-2020-fgvc7/sample_submission.csv")
-    # submission_df[['healthy', 'multiple_diseases', 'rust', 'scab']] = p
-    # submission_df.to_csv('submission.csv', index = False)
+    history=History(model_name="effinet")
+    loop_train_process(model_name="effinet")

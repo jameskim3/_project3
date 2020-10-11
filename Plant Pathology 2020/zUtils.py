@@ -176,3 +176,60 @@ class History:
         return self.valid_info[f"F{fold}_acc"][ids],\
     self.valid_info[f"F{fold}_labels"][ids],\
     self.valid_info[f"F{fold}_preds"][ids]
+
+import sklearn.metrics as metrics
+import itertools
+class ConfusionMatrix:
+    def __init__(self):
+        pass
+    def sigmoid(x):
+        return 1 / (1 +np.exp(-x))
+    def get_cm(y_true,y_pred):
+        cm=metrics.confusion_matrix(y_true, sigmoid(y_pred)>0.5)
+        return cm.transpose()
+    def plot_confusion_matrix(cm,
+                            x_target_names,
+                            y_target_names,
+                            title='Confusion matrix',
+                            cmap=None,
+                            normalize=True):
+ 
+
+        accuracy = np.trace(cm) / float(np.sum(cm))
+        misclass = 1 - accuracy
+
+        if cmap is None:
+            cmap = plt.get_cmap('Blues')
+
+        plt.figure(figsize=(8, 6))
+        plt.imshow(cm, interpolation='nearest', cmap=cmap)
+        plt.title(title)
+        plt.colorbar()
+
+        if x_target_names is not None:
+            tick_marks = np.arange(len(x_target_names))
+            plt.xticks(tick_marks, x_target_names, rotation=45)
+        if y_target_names is not None:
+            tick_marks = np.arange(len(y_target_names))
+            plt.yticks(tick_marks, y_target_names, rotation=45)
+
+        if normalize:
+            cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+
+
+        thresh = cm.max() / 1.5 if normalize else cm.max() / 2
+        for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+            if normalize:
+                plt.text(j, i, "{:0.4f}".format(cm[i, j]),
+                        horizontalalignment="center",
+                        color="white" if cm[i, j] > thresh else "black")
+            else:
+                plt.text(j, i, "{:,}".format(cm[i, j]),
+                        horizontalalignment="center",
+                        color="white" if cm[i, j] > thresh else "black")
+
+
+        plt.tight_layout()
+        plt.ylabel('True label')
+        plt.xlabel(f'Predicted label\nRecall={cm[0,0]/cm.sum(0)[0]:0.4f}; FPR={cm[0,1]/cm.sum(0)[1]:0.4f}')
+        plt.show()  
