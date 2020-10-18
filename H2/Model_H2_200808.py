@@ -144,10 +144,10 @@ def predict(fold):
     preds=np.vstack(preds)#.argmax(axis=1)
 
     #script to c++
-    sample=torch.rand(1,3,224,224)
-    model.to("cpu")
-    traced_script_module = torch.jit.trace(model,sample)
-    traced_script_module.save(save_path+f"/traced_200808_resnext50_fold_{fold}.pt")
+    # sample=torch.rand(1,3,224,224)
+    # model.to("cpu")
+    # traced_script_module = torch.jit.trace(model,sample)
+    # traced_script_module.save(save_path+f"/traced_200808_resnext50_fold_{fold}.pt")
     
     return preds
 

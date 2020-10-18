@@ -126,12 +126,12 @@ def predict(fold=0):
     return preds 
 
 def loop_train_process(model_name):
-#     loop_train(fold=0,model_name=model_name,weights=[1,1])
-#     loop_train(fold=0,model_name=model_name,weights=[2,1])
-#      loop_train(fold=0,model_name=model_name,weights=[4,1])
-    loop_train(fold=0,model_name=model_name,weights=[8,1])
-#     loop_train(fold=0,model_name=model_name,weights=[16,1])
-#     loop_train(fold=0,model_name=model_name,weight=[32,1])
+    loop_train(fold=0,model_name=model_name,weights=[1,1])
+    # loop_train(fold=0,model_name=model_name,weights=[2,1])
+    # loop_train(fold=0,model_name=model_name,weights=[4,1])
+    # loop_train(fold=0,model_name=model_name,weights=[8,1])
+    # loop_train(fold=0,model_name=model_name,weights=[16,1])
+    # loop_train(fold=0,model_name=model_name,weight=[32,1])
     
     
     

@@ -35,7 +35,7 @@ int inference(int epoch) {
 	clock_t startTime = clock();
 	torch::jit::script::Module module;
 	try {
-		char path[] = "E:/temp/saved_models/traced_200808_resnext50_fold_0.pt";
+		char path[] = "E:/temp/saved_models/traced_effi_b4_fold_0_1018.pt";
 		module = torch::jit::load(path);
 		if (device_type == torch::kCUDA) {
 			module.to(at::kCUDA);
@@ -54,10 +54,7 @@ int inference(int epoch) {
 	//Image Load
 	std::vector<std::string> img_path;
 	std::vector<std::string> img_files;
-	img_path.push_back("E:/temp/images/0_Normal/");
-	img_path.push_back("E:/temp/images/1_OverProcess/");
-	img_path.push_back("E:/temp/images/2_UnderProcess/");
-	img_path.push_back("E:/temp/images/3_Defect/");
+	img_path.push_back("E:/temp/images/train/");
 
 	for (int i = 0;i < img_path.size();i++) {
 		for (auto & p : fs::directory_iterator(img_path[i])) {
@@ -73,6 +70,9 @@ int inference(int epoch) {
 		torch::Tensor tensor_image = torch::from_blob(img.data, { 1, img.rows, img.cols, 3 }, at::kByte);
 		tensor_image = tensor_image.permute({ 0, 3, 1, 2 });
 		tensor_image = tensor_image.to(torch::kFloat).div_(255);
+		tensor_image[0][0] = tensor_image[0][0].sub_(0.485).div_(0.229);
+		tensor_image[0][1] = tensor_image[0][1].sub_(0.456).div_(0.224);
+		tensor_image[0][2] = tensor_image[0][2].sub_(0.406).div_(0.225);
 		vImage.push_back(tensor_image);
 	}
 	cout << "Image Load " << clock() - startTime << std::endl;
@@ -91,27 +91,28 @@ int inference(int epoch) {
 		at::Tensor output = module.forward(inputs).toTensor();
 		float od[4];
 		if (device_type == torch::kCUDA) {
-			for (int j = 0;j < 4;j++) {
+			for (int j = 0;j < 2;j++) {
 				od[j] = output.cpu().data<float>()[j];
 			}
 		}
 		else {
-			for (int j = 0;j < 4;j++) {
+			for (int j = 0;j < 2;j++) {
 				od[j] = output.data<float>()[j];
 			}
 		}
 		//Image inference result
-		//std::cout << od[0] << ", " << od[1] << ", " << od[2] << ", " << od[3];
-		//std::cout << " max " << output.argmax(1).item().toInt();
-		//cout << " inference " << clock() - startTime << std::endl;
-		//startTime = clock();
+		//std::cout << od[0] << ", " << od[1];
+		printf("%.8f, %.8f", od[0], od[1]);
+		std::cout << " max " << output.argmax(1).item().toInt();
+		cout << " inference " << clock() - startTime << std::endl;
+		startTime = clock();
 
 		// epco accuracy test
-		int total[] = { 512, 607, 1229, 1821 };
-		if (i < total[0] && output.argmax(1).item().toInt() == 0) correct++;
-		else if (i < total[1] && output.argmax(1).item().toInt() == 1) correct++;
-		else if (i < total[2] && output.argmax(1).item().toInt() == 2) correct++;
-		else if (i < total[3] && output.argmax(1).item().toInt() == 3) correct++;
+		//int total[] = { 512, 607, 1229, 1821 };
+		//if (i < total[0] && output.argmax(1).item().toInt() == 0) correct++;
+		//else if (i < total[1] && output.argmax(1).item().toInt() == 1) correct++;
+		//else if (i < total[2] && output.argmax(1).item().toInt() == 2) correct++;
+		//else if (i < total[3] && output.argmax(1).item().toInt() == 3) correct++;
 	}
 	cout << "Accuracy " << correct << std::endl;
 
@@ -127,7 +128,7 @@ int inference(int epoch) {
 }
 
 int main(int argc, const char* argv[]) {
-	for (int epoch = 0;epoch < 10;epoch++) {
+	for (int epoch = 0;epoch < 1;epoch++) {
 		inference(epoch);
 		std::this_thread::sleep_for(2s);
 	}
