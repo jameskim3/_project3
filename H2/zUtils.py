@@ -1,5 +1,4 @@
 import torch
-from PIL import Image
 import numpy as np
 import cv2
 
@@ -110,37 +109,43 @@ MotionBlur, MedianBlur, RandomBrightnessContrast, IAAPiecewiseAffine, IAASharpen
 IAAEmboss, Flip, OneOf, Compose, Rotate, Cutout, HorizontalFlip, Normalize ) 
 
 class Utils:
-    def __init__(self,mode):
-        self.mean = (0.0, 0.0, 0.0)
-        self.std = (1., 1., 1.)
-        self.mode = mode
-    def get_aug(self):
-        mean = (0.0, 0.0, 0.0)
-        std = (1., 1., 1.)
-        if self.mode =="train":
-            aug=Compose([Rotate(15),
-                OneOf([IAAAdditiveGaussianNoise(),GaussNoise(),], p=0.2),
-                OneOf([MotionBlur(p=0.2),MedianBlur(blur_limit=3, p=0.1),Blur(blur_limit=3, p=0.1),], p=0.2),
-                ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.2, rotate_limit=45, p=0.2),
-                OneOf([OpticalDistortion(p=0.3),GridDistortion(p=0.1),IAAPiecewiseAffine(p=0.3),], p=0.2),
-                OneOf([
-                    CLAHE(clip_limit=2),
-                    IAASharpen(),
-                    IAAEmboss(),
-                    RandomBrightnessContrast(),
-                ], p=0.3),
-                HueSaturationValue(p=0.3),
-                Normalize(mean=mean,std=std,max_pixel_value=255.0),
-                ])
-        else:
-            aug=Compose([Normalize(mean=mean,std=std,max_pixel_value=255.0),])
+    def __init__():
+        pass
+    def get_aug(mode="train"):
+        if mode=="Nor":
+            aug=A.Compose([
+                ToTensor(),
+            ])
+        elif mode =="train":
+            print("train aug")
+            mean = (0.485,0.456,0.406)
+            std = (0.229,0.224,0.225)
+            aug=A.Compose([
+                A.Flip(),
+                A.ShiftScaleRotate(rotate_limit=1.0, p=0.8),
+                # Pixels
+                A.OneOf([
+                    A.IAAEmboss(p=1.0),
+                    A.IAASharpen(p=1.0),
+                    A.Blur(p=1.0),
+                ], p=0.5),
+                # Affine
+                A.OneOf([
+                    A.ElasticTransform(p=1.0),
+                    A.IAAPiecewiseAffine(p=1.0)
+                ], p=0.5),
 
-        return aug
-    def get_model(self,model_name, classes):
-        if model_name=="effinet": return EffiNet(classes=classes)
-        if model_name=="resnet": return Resnet50(classes=classes)    
-        if model_name=="densenet": return Densenet(classes=classes)    
-        if model_name=="effinet7": return EffiNet7(classes=classes)   
+                A.Normalize(mean=mean,std=std,max_pixel_value=255.0,always_apply=True),
+            ])
+        else:
+            print("valid/test aug")
+            mean = (0.485,0.456,0.406)
+            std = (0.229,0.224,0.225)
+            aug=A.Compose([
+                A.Normalize(mean=mean,std=std,max_pixel_value=255.0,always_apply=True),
+            ])
+
+        return aug 
 
 class History:
     def __init__(self,model_name):

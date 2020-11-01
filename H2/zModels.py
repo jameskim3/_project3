@@ -60,3 +60,10 @@ class EffiNet7(nn.Module):
     def forward(self, image):
         out = self.base_model(image)
         return out
+
+def get_model_effi_b4(classes):
+    classes=classes
+    base_model = EfficientNet.from_pretrained("efficientnet-b4")
+    num_ftrs = base_model._fc.in_features
+    base_model._fc = nn.Linear(num_ftrs,classes, bias = True)
+    return base_model   

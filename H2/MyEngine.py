@@ -1,109 +1,177 @@
+#clcarwin / focal_loss_pytorch
 import torch
-from tqdm import tqdm
-from MyUtils import AverageMeter
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable
+import numpy as np
 
-try:
-    import torch_xla.core.xla_model as xm
-
-    _xla_available = True
-except ImportError:
-    _xla_available = False
-
-try:
-    from apex import amp
-
-    _apex_available = True
-except ImportError:
-    _apex_available = False
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable
 
 
+class FocalLoss(nn.Module):
+    def __init__(self, gamma=2, alpha=None, size_average=True):
+        super(FocalLoss, self).__init__()
+        self.gamma = gamma
+        self.alpha = alpha
+#         if isinstance(alpha,(float,int,long)): self.alpha = torch.Tensor([alpha,1-alpha])
+#         if isinstance(alpha,list): self.alpha = torch.Tensor(alpha)
+        self.size_average = size_average
+
+    def forward(self, input, target):
+        if input.dim()>2:
+            input = input.view(input.size(0),input.size(1),-1)  # N,C,H,W => N,C,H*W
+            input = input.transpose(1,2)    # N,C,H*W => N,H*W,C
+            input = input.contiguous().view(-1,input.size(2))   # N,H*W,C => N*H*W,C
+        target = target.view(-1,1)
+
+        logpt = F.log_softmax(input)
+        logpt = logpt.gather(1,target)
+        logpt = logpt.view(-1)
+        pt = Variable(logpt.data.exp())
+
+        if self.alpha is not None:
+            if self.alpha.type()!=input.data.type():
+                self.alpha = self.alpha.type_as(input.data)
+            at = self.alpha.gather(0,target.data.view(-1))
+            logpt = logpt * Variable(at)
+
+        loss = -1 * (1-pt)**self.gamma * logpt
+        if self.size_average: return loss.mean()
+        else: return loss.sum()
+# My Focal Loss
+class FocalLoss2(nn.Module):
+    def __init__(self, gamma=2, eps=1e-7):
+        super(FocalLoss2, self).__init__()
+        self.gamma = gamma
+        self.eps = eps
+    def fl_onehot(self,index,classes,tar):
+        y_onehot = torch.FloatTensor(index, classes).to("cuda")
+        y_onehot.zero_()
+        y_onehot.scatter_(1, tar, 1)
+        return (y_onehot)        
+    def forward(self, inputs, targets):
+        y = self.fl_onehot(inputs.size()[0],inputs.size()[1],targets.view(-1,1))
+        logit = F.softmax(inputs, dim=-1)
+        logit = logit.clamp(self.eps, 1. - self.eps)
+
+        loss = -1 * y * torch.log(logit) # cross entropy
+        loss = loss * (1 - logit) ** self.gamma # focal loss
+
+        return loss.mean()      
+# My Focal Loss
+class FocalLoss3(nn.Module):# for cutmix
+    def __init__(self, gamma=2, eps=1e-7):
+        super(FocalLoss3, self).__init__()
+        self.gamma = gamma
+        self.eps = eps
+    def forward(self, inputs, targets):
+        logit = F.softmax(inputs, dim=-1)
+        logit = logit.clamp(self.eps, 1. - self.eps)
+
+        loss = -1 * targets * torch.log(logit) # cross entropy
+        loss = loss * (1 - logit) ** self.gamma # focal loss
+
+        return loss.mean()  
+import torch.nn.functional as F
+class DenseCrossEntropy(nn.Module):
+    def __init__(self):
+        super(DenseCrossEntropy, self).__init__()
+        
+    def forward(self, logits, labels):
+        logits = logits.float()
+        labels = labels.float()
+        
+        logprobs = F.log_softmax(logits, dim=-1)
+        
+        loss = -labels * logprobs
+        loss = loss.sum(-1)
+
+        return loss.mean()   
+
+## Engine
+from sklearn.metrics import accuracy_score
 class Engine:
-    @staticmethod
-    def train(
-        data_loader,
-        model,
-        optimizer,
-        device,
-        scheduler=None,
-        accumulation_steps=1,
-        use_tpu=False,
-        fp16=False,
-    ):
-        if use_tpu and not _xla_available:
-            raise Exception(
-                "You want to use TPUs but you dont have pytorch_xla installed"
-            )
-        if fp16 and not _apex_available:
-            raise Exception("You want to use fp16 but you dont have apex installed")
-        if fp16 and use_tpu:
-            raise Exception("Apex fp16 is not available when using TPUs")
-        if fp16:
-            accumulation_steps = 1
-        losses = AverageMeter()
-        predictions = []
-        model.train()
-        if accumulation_steps > 1:
-            optimizer.zero_grad()
-        tk0 = tqdm(data_loader, total=len(data_loader), disable=use_tpu)
-        for b_idx, data in enumerate(tk0):
-            for key, value in data.items():
-                data[key] = value.to(device)
-            if accumulation_steps == 1 and b_idx == 0:
-                optimizer.zero_grad()
-            _, loss = model(**data)
-
-            if not use_tpu:
-                with torch.set_grad_enabled(True):
-                    if fp16:
-                        with amp.scale_loss(loss, optimizer) as scaled_loss:
-                            scaled_loss.backward()
-                    else:
-                        loss.backward()
-                    if (b_idx + 1) % accumulation_steps == 0:
-                        optimizer.step()
-                        if scheduler is not None:
-                            scheduler.step()
-                        if b_idx > 0:
-                            optimizer.zero_grad()
+    def __init__(self,model,optimizer,device,classes,weights=None):
+        self.model=model
+        self.optimizer=optimizer
+        self.device=device
+        self.classes=classes
+        self.weights=weights
+        
+        if weights is None:
+            self.criterion=nn.CrossEntropyLoss()
+        else:
+            class_weights = torch.FloatTensor(weights).cuda()
+            self.criterion=nn.CrossEntropyLoss(class_weights)
+    
+    def loss_fn(self,targets,outputs):
+        return self.criterion(outputs,targets)
+        
+    def get_accuracy(self,labels,preds):
+        total=labels.shape[0]
+        preds=preds.argmax(1).reshape(-1,1)
+        return np.uint8(labels==preds).sum()/total
+    
+    def train(self,data_loader):
+        preds_for_acc = []
+        labels_for_acc = []
+        self.model.train()
+        final_loss=0
+        for data in data_loader:
+            self.optimizer.zero_grad()
+            inputs=data["img"].to(self.device)
+            targets=data["tar"].to(self.device)
+            outputs=self.model(inputs)
+            loss=self.loss_fn(targets,outputs)
+            loss.backward()
+            self.optimizer.step()
+            final_loss += loss.item()
+            ## accuracy
+            labels = targets.cpu().numpy().reshape(-1,1)
+            preds = outputs.cpu().detach().numpy()
+            if len(labels_for_acc)==0:
+                labels_for_acc = labels
+                preds_for_acc = preds
             else:
-                loss.backward()
-                xm.optimizer_step(optimizer)
-                if scheduler is not None:
-                    scheduler.step()
-                if b_idx > 0:
-                    optimizer.zero_grad()
-
-            losses.update(loss.item(), data_loader.batch_size)
-            tk0.set_postfix(loss=losses.avg)
-        return losses.avg
-
-    @staticmethod
-    def evaluate(data_loader, model, device, use_tpu=False):
-        losses = AverageMeter()
+                labels_for_acc=np.vstack((labels_for_acc,labels))
+                preds_for_acc=np.vstack((preds_for_acc,preds))
+        accuracy = self.get_accuracy(labels_for_acc,preds_for_acc)
+        return final_loss/len(data_loader),accuracy,labels_for_acc,preds_for_acc
+    
+    def validate(self,data_loader):
+        preds_for_acc = []
+        labels_for_acc = []
+        self.model.eval()
+        final_loss=0
+        for data in data_loader:
+            inputs=data["img"].to(self.device)
+            targets=data["tar"].to(self.device)
+            with torch.no_grad():
+                outputs=self.model(inputs)
+                loss=self.loss_fn(targets,outputs)
+                final_loss += loss.item()
+            ## accuracy
+            labels = targets.cpu().numpy().reshape(-1,1)
+            preds = outputs.cpu().detach().numpy()
+            if len(labels_for_acc)==0:
+                labels_for_acc = labels
+                preds_for_acc = preds
+            else:
+                labels_for_acc=np.vstack((labels_for_acc,labels))
+                preds_for_acc=np.vstack((preds_for_acc,preds))
+        accuracy = self.get_accuracy(labels_for_acc,preds_for_acc)
+        return final_loss/len(data_loader),accuracy,labels_for_acc,preds_for_acc
+    
+    def predict(self,data_loader):
+        self.model.eval()
         final_predictions = []
-        model.eval()
         with torch.no_grad():
-            tk0 = tqdm(data_loader, total=len(data_loader), disable=use_tpu)
-            for b_idx, data in enumerate(tk0):
-                for key, value in data.items():
-                    data[key] = value.to(device)
-                predictions, loss = model(**data)
+            for data in data_loader:
+                inputs=data["img"].to(self.device)
+                predictions = self.model(inputs)
                 predictions = predictions.cpu()
-                losses.update(loss.item(), data_loader.batch_size)
-                final_predictions.append(predictions)
-                tk0.set_postfix(loss=losses.avg)
-        return final_predictions, losses.avg
-
-    @staticmethod
-    def predict(data_loader, model, device, use_tpu=False):
-        model.eval()
-        final_predictions = []
-        with torch.no_grad():
-            tk0 = tqdm(data_loader, total=len(data_loader), disable=use_tpu)
-            for b_idx, data in enumerate(tk0):
-                for key, value in data.items():
-                    data[key] = value.to(device)
-                predictions, _ = model(**data)
-                predictions = predictions.cpu()
-                final_predictions.append(predictions)
+                final_predictions.append(predictions.detach().numpy())
         return final_predictions

@@ -101,12 +101,11 @@ class Engine:
         self.classes=classes
         self.weights=weights
         
-        if weights is not None:
+        if weights is None:
+            self.criterion=nn.CrossEntropyLoss()
+        else:
             class_weights = torch.FloatTensor(weights).cuda()
             self.criterion=nn.CrossEntropyLoss(class_weights)
-    #         self.criterion=DenseCrossEntropy()
-    #         self.criterion=FocalLoss2()
-    #         self.criterion=FocalLoss3()
     
     def loss_fn(self,targets,outputs):
         return self.criterion(outputs,targets)
@@ -140,7 +139,7 @@ class Engine:
                 labels_for_acc=np.vstack((labels_for_acc,labels))
                 preds_for_acc=np.vstack((preds_for_acc,preds))
         accuracy = self.get_accuracy(labels_for_acc,preds_for_acc)
-        return final_loss/len(data_loader),accuracy
+        return final_loss/len(data_loader),accuracy,labels_for_acc,preds_for_acc
     
     def validate(self,data_loader):
         preds_for_acc = []
